@@ -1,0 +1,5 @@
+Date     IP address     Device    Capacity Used   Free   Percent Status
+09/30/19 127.0.0.1      /dev/mapper/centos_shcentos72x64-root 130G     18G    113G   14%     SAFE
+09/30/19 127.0.0.1      /dev/sda1 521M     288M   234M   56%     SAFE
+09/30/19 16.187.190.234 /dev/mapper/centos_shcentos72x64-root 120G     42G    79G    35%     SAFE
+09/30/19 16.187.190.234 /dev/sda1 521M     200M   322M   39%     SAFE
