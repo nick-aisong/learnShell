@@ -1,0 +1,45 @@
+#!/bin/bash
+# 文件名:intruder_detect.sh
+# 用途:入侵报告工具，以auth.log作为日志文件
+AUTHLOG=/var/log/audit.log
+if [[ -n $1 ]];
+then
+  AUTHLOG=$1
+  echo Using Log file : $AUTHLOG
+fi
+LOG=/tmp/valid.$$.log
+grep -v "invalid" $AUTHLOG > $LOG
+users=$(grep "Failed password" $LOG | awk '{ print $(NF-5) }' | sort | uniq)
+printf "%-5s|%-10s|%-10s|%-13s|%-33s|%s\n" "Sr#" "User" "Attempts" "IP address" "Host_Mapping" "Time range"
+ucount=0;
+ip_list="$(egrep -o "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" $LOG | sort | uniq)"
+for ip in $ip_list;
+do
+  grep $ip $LOG > /tmp/temp.$$.log
+  for user in $users;
+  do
+    grep $user /tmp/temp.$$.log> /tmp/$$.log
+    cut -c-16 /tmp/$$.log > $$.time
+    tstart=$(head -1 $$.time);
+    start=$(date -d "$tstart" "+%s");
+    tend=$(tail -1 $$.time);
+    end=$(date -d "$tend" "+%s")
+    limit=$(( $end - $start ))
+    if [ $limit -gt 120 ];
+    then
+      let ucount++;
+      IP=$(egrep -o "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" /tmp/$$.log | head -1 );
+      TIME_RANGE="$tstart-->$tend"
+      ATTEMPTS=$(cat /tmp/$$.log|wc -l);
+      HOST=$(host $IP | awk '{ print $NF }' )
+      printf "%-5s|%-10s|%-10s|%-10s|%-33s|%-s\n" "$ucount" "$user" "$ATTEMPTS" "$IP" "$HOST" "$TIME_RANGE";
+    fi
+  done
+done
+
+rm/tmp/valid.$$.log/tmp/$$.log $$.time/tmp/temp.$$.log 2>/dev/null 
+
+
+### 这个是CentOS7 里login fail的记录格式，可能和脚本中提取的格式不一致，毕竟日志文件存放的位置也变了
+### 但是提供了一个很好的思路
+# type=USER_AUTH msg=audit(1569826431.696:1324007): pid=9608 uid=0 auid=4294967295 ses=4294967295 msg='op=password acct="admin" exe="/usr/sbin/sshd" hostname=? addr=127.0.0.1 terminal=ssh res=failed'
