@@ -1,0 +1,2 @@
+书籍推荐安装：Ubuntu/Debian Linux
+实际学习环境：CentOS 7
