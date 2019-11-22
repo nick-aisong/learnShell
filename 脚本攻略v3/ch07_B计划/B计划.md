@@ -239,9 +239,86 @@ Total bytes written: 20480 (20KiB, 12MiB/s)
 
 #### 使用cpio归档
 
+cpio类似于tar。它可以归档多个文件和目录，同时保留所有的文件属性，如权限、文件所
+有权等。cpio格式被用于RPM软件包（Fedora使用这种格式）、Linux内核的initramfs文件（包含
+了内核镜像）等
 
+cpio通过stdin获取输入文件名并将归档文件写入stdout。我们必须将stdout重定向到文
+件中来保存cpio的输出
+
+示例：
+
+```shell
+# 创建测试文件
+$ touch file1 file2 file3 
+
+# 归档测试文件
+$ ls file* | cpio -ov > archive.cpio 
+
+# 列出cpio归档文件中的内容
+$ cpio -it < archive.cpio 
+
+# 从cpio归档文件中提取文件
+$ cpio -id < archive.cpi
+```
+
+对于归档命令cpio：
+
+- -o指定了输出
+- -v用来打印归档文件列表
+
+当进行提取时，cpio会将归档内容提取到绝对路径中。但是tar会移去绝对路径开头的/，将其转换为相对路径
+
+
+
+对于列出给定cpio归档文件中所有内容的命令：
+
+- -i用于指定输入
+- -t用于列出归档文件中的内容
+
+在提取命令中，-o表示提取，cpio会直接覆盖文件，不作任何提示；-d在需要的时候创建
+新的目录
 
 #### 使用gzip压缩数据 
+
+gzip是GNU/Linux平台下常用的压缩格式。gzip、gunzip和zcat都可以处理这种格式。但
+这些工具只能压缩/解压缩单个文件或数据流，无法直接归档目录和多个文件。好在gzip可以同
+tar和cpio配合使用
+
+gzip和gunzip可以分别用于压缩与解压缩
+
+```shell
+# 使用gzip压缩文件
+$ gzip filename
+$ ls
+filename.gz 
+
+# 解压缩gzip文件
+$ gunzip filename.gz
+$ ls
+filename
+
+# 列出压缩文件的属性信息
+$ gzip -l test.txt.gz
+compressed uncompressed ratio uncompressed_name
+35 6 -33.3% test.txt
+
+# gzip命令可以从stdin中读入文件并将压缩文件写出到stdout
+# 从stdin读入并将压缩后的数据写出到
+$ cat file | gzip -c > file.gz 
+
+# 选项 -c用来将输出指定到stdout。该选项也可以与cpio配合使用
+$ ls * | cpio -o | gzip -c > cpiooutput.gz
+$ zcat cpiooutput.gz | cpio -it 
+
+# 我们可以指定gzip的压缩级别。--fast或--best选项分别提供最低或最高的压缩率
+```
+
+
+
+
+
+
 
 
 
@@ -249,11 +326,21 @@ Total bytes written: 20480 (20KiB, 12MiB/s)
 
 
 
+
+
 #### 更快的归档工具pbzip2
 
 
 
+
+
+
+
 #### 创建压缩文件系统
+
+
+
+
 
 
 
@@ -267,5 +354,9 @@ Total bytes written: 20480 (20KiB, 12MiB/s)
 
 
 
+
+
 #### 使用fsarchiver创建全盘镜像
+
+
 
