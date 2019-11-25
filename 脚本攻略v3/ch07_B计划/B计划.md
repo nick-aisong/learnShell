@@ -314,19 +314,164 @@ $ zcat cpiooutput.gz | cpio -it
 # 我们可以指定gzip的压缩级别。--fast或--best选项分别提供最低或最高的压缩率
 ```
 
+补充内容
 
+gzip命令通常与其他命令结合使用，另外还有一些高级选项可以用来指定压缩率
 
+1. 压缩归档文件
 
+后缀.gz表示的是经过gzip压缩过的tar归档文件
 
+有两种方法可以创建此类文件：
 
+```shell
+# 1
+$ tar -czvvf archive.tar.gz [FILES] 
+# 或者
+$ tar -cavvf archive.tar.gz [FILES] 
+# 选项-z指明用gzip进行压缩，选项-a指明根据文件扩展名推断压缩格式
+```
 
+```shell
+# 2
+# 首先，创建一个tar归档文件
+$ tar -cvvf archive.tar [FILES] 
+# 压缩tar归档文件
+$ gzip archive.tar
+```
 
+如果有大量文件（上百个）需要归档及压缩，我们可以采用第二种方法并稍作变动。将多个
+文件作为命令行参数传递给tar的问题在于后者能够接受的参数有限。要解决这个问题，我们可
+以在循环中使用追加选项（-r）来逐个添加文件：
+
+```shell
+FILE_LIST="file1 file2 file3 file4 file5"
+for f in $FILE_LIST;
+  do
+    tar -rvf archive.tar $f
+  done
+
+gzip archive.tar 
+
+# 下面的命令可以提取经由gzip压缩的归档文件中的内容
+$ tar -xavvf archive.tar.gz -C extract_directory 
+# 其中，选项-a用于自动检测压缩格式
+```
+
+2. zcat——直接读取gzip格式文件
+
+zcat命令无需经过解压缩操作就可以将.gz文件的内容输出到stdout。.gz文件不会发生任
+何变化
+
+```shell
+$ ls
+test.gz
+$ zcat test.gz
+A test file
+# 文件test中包含了一行文本"A test file"
+$ ls
+test.gz 
+```
+
+3. 压缩率
+
+我们可以指定压缩率，它共有9级，其中：
+
+- 1级的压缩率最低，但是压缩速度最快
+- 9级的压缩率最高，但是压缩速度最慢
+
+```shell
+# 你可以按照下面的方法指定压缩比：
+$ gzip -5 test.img
+# gzip默认使用第6级，倾向于在牺牲一些压缩速度的情况下获得比较好的压缩率
+```
+
+4. 使用bzip2 
+
+bzip2在功能和语法上与gzip类似。不同之处在于bzip2的压缩效率比gzip更高，但花费的
+时间比gzip更长
+
+```shell
+# 用bzip2进行压缩
+$ bzip2 filename 
+
+# 解压缩bzip2格式的文件
+$ bunzip2 filename.bz2 
+
+# 生成tar.bz2文件并从中提取内容的方法同之前介绍的tar.gz类似
+$ tar -xjvf archive.tar.bz2 
+# 其中，-j表明该归档文件是以bzip2格式压缩的
+```
+
+5. 使用lzma 
+
+lzma的压缩率要优于gzip和bzip2
+
+```shell
+# 使用lzma进行压缩
+$ lzma filename
+
+# 解压缩lzma文件
+$ unlzma filename.lzma
+
+# 可以使用--lzma选项压缩生成的tar归档文件
+$ tar -cvvf --lzma archive.tar.lzma [FILES] 
+# 或者
+$ tar -cavvf archive.tar.lzma [FILES] 
+
+# 将lzma压缩的tar归档文件中的内容提取到指定的目录中
+$ tar -xvvf --lzma archive.tar.lzma -C extract_directory 
+# 或者
+$ tar -xavvf archive.tar.lzma -C extract_directory 
+```
 
 #### 使用zip归档及压缩
 
+ZIP作为一种流行的压缩格式，在Linux、Mac和Windows平台中都可以看到它的身影。在Linux
+下，它的应用不如gzip或bzip2那么广泛，但是向其他平台分发数据的时候，这种格式很有用
 
+1. 创建zip格式的压缩归档文件（zip archive）
 
+```shell
+$ zip archive_name.zip file1 file2 file3... 
 
+$ zip file.zip file 
+```
+
+2. 选项-f可以对目录进行递归式归档
+
+```shell
+$ zip -r archive.zip folder1 folder2 
+```
+
+3. unzip命令可以从ZIP文件中提取内容
+
+```shell
+$ unzip file.zip
+# 在完成提取操作之后，unzip并不会删除file.zip（这一点与unlzma和gunzip不同）
+```
+
+4. 选项-u可以更新压缩归档文件中的内容
+
+```shell
+$ zip file.zip -u newfile 
+```
+
+5. 选项-d从压缩归档文件中删除一个或多个文件
+
+```shell
+$ zip -d arc.zip file.txt 
+```
+
+6. 选项-l可以列出压缩归档文件中的内容
+
+```shell
+$ unzip -l archive.zip
+```
+
+尽管同大多数我们已经讲过的归档、压缩工具类似，但zip在完成归档之后并不会删除源文
+件，这一点与lzma、gzip、bzip2不同。尽管与tar相像，但zip可以进行归档和压缩操作，而
+单凭tar是无法进行压缩的
 
 #### 更快的归档工具pbzip2
 
