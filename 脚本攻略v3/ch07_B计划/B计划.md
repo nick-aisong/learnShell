@@ -1,16 +1,16 @@
 B计划
 ========
-| 目录                       | 主要命令 |
-| -------------------------- | -------- |
-| 使用tar归档                |          |
-| 使用cpio归档               |          |
-| 使用gzip压缩数据           |          |
-| 使用zip归档及压缩          |          |
-| 更快的归档工具pbzip2       |          |
-| 创建压缩文件系统           |          |
-| 使用rsync备份系统快照      |          |
-| 差异化归档                 |          |
-| 使用fsarchiver创建全盘镜像 |          |
+| 目录                       | 主要命令             |
+| -------------------------- | -------------------- |
+| 使用tar归档                | tar                  |
+| 使用cpio归档               | cpio                 |
+| 使用gzip压缩数据           | gzip                 |
+| 使用zip归档及压缩          | zip                  |
+| 更快的归档工具pbzip2       | pbzip2               |
+| 创建压缩文件系统           | mksquashfs           |
+| 使用rsync备份系统快照      | rsync                |
+| 差异化归档                 | find、tar、zip、cpio |
+| 使用fsarchiver创建全盘镜像 | fsarchiver           |
 
 #### 使用tar归档
 
@@ -475,33 +475,286 @@ $ unzip -l archive.zip
 
 #### 更快的归档工具pbzip2
 
+我们目前已经看到的多数压缩命令只能利用单个处理器核心。pbzip2、plzip、pigz和
+lrzip命令都采用了多线程，能够借助多核来降低压缩文件所需的时间
 
+大多数发行版中都没有安装这些工具，可以使用apt-get或yum自行安装
 
+1. 压缩单个文件
 
+```shell
+pbzip2 myfile.tar 
+# pbzip2会自动检测系统中处理器核心的数量，然后将myfile.tar压缩成myfile.tar.bz2
+```
 
+2. 要压缩并归档多个文件或目录，可以使用tar配合pbzip2来实现
 
+```shell
+tar cf sav.tar.bz2 --use-compress-prog=pbzip2 dir
+# 或者
+tar -c directory_to_compress/ | pbzip2 -c > myfile.tar.bz2 
+```
+
+3. 从pbzip2格式的文件中进行提取
+
+```shell
+# 选项-d可以解压缩
+pbzip2 -d myfile.tar.bz2 
+
+# 如果是tar.bz2文件，我们可以利用管道完成解压缩和提取
+pbzip2 -dc myfile.tar.bz2 | tar x 
+```
+
+工作原理
+
+pbzip2在内部使用的压缩算法和bzip2一样，但是它会利用pthreads（一个线程库）来同
+时压缩多个数据块。线程化对于用户而言都是透明的，结果就是获得更快的压缩速度
+
+同gzip或bzip2一样，pbzip2并不会创建归档文件，它只能对单个文件进行操作。要想压
+缩多个文件或目录，还得结合tar或cpio来使用
+
+补充内容
+
+1. 手动指定处理器数量
+
+```shell
+# 如果无法自动检测处理器核心数量或是希望能够释放一些处理核心供其他任务使用，-p选项就能派上用场了
+pbzip2 -p4 myfile.tar 
+# 上面的命令告诉pbzip2使用4个处理器核心
+```
+
+2. 指定压缩比
+
+从选项-1到-9可以指定最快到最好的压缩效果，其中-1的压缩速度最快，-9的压缩率最高
 
 #### 创建压缩文件系统
 
+squashfs程序能够创建出一种具有超高压缩率的只读型文件系统。它能够将2GB~3GB的数
+据压缩成一个700MB的文件。Linux LiveCD（或是LiveUSB）就是使用squashfs创建的。这类
+CD利用只读型的压缩文件系统将根文件系统保存在一个压缩文件中。可以使用环回方式将其挂
+载并装入完整的Linux环境。如果需要某些文件，可以将它们解压，然后载入内存中使用
 
 
 
+果需要压缩归档文件并能够随机访问其中的内容，那么squashfs就能够大显身手了。解
+压体积较大的压缩归档文件可得花上一阵工夫。但如果将其以环回形式挂载，那速度会变得飞快。
+因为只有出现访问请求时，对应的那部分压缩文件才会被解压缩
 
 
+
+所有的现代Linux发行版都支持挂载squashfs文件系统。但是创建squashfs文件的话，则
+需要使用包管理器安装squashfs-tools：
+
+```shell
+$ sudo apt-get install squashfs-tools 
+# 或者
+$ yum install squashfs-tools 
+```
+
+1. 使用mksquashfs命令添加源目录和文件，创建一个squashfs文件
+
+```shell
+$ mksquashfs SOURCES compressedfs.squashfs 
+# SOURCES可以是通配符、文件或目录路径
+
+# 示例 
+$ sudo mksquashfs /etc test.squashfs
+Parallel mksquashfs: Using 2 processors
+Creating 4.0 filesystem on test.squashfs, block size 131072.
+[=======================================] 1867/1867 100% 
+```
+
+2. 利用环回形式挂载squashfs文件
+
+```shell
+mkdir /mnt/squash
+mount -o loop compressedfs.squashfs /mnt/squash
+
+# 你可以通过/mnt/squashfs访问文件内容
+```
+
+补充内容
+
+```shell
+# 在创建squashfs文件时排除部分文件
+# 选项-e可以排除部分文件和目录
+$ sudo mksquashfs /etc test.squashfs -e /etc/passwd /etc/shadow 
+
+# 也可以将需要排除的文件名列表写入文件，然后用选项-ef指定该文件
+$ cat excludelist
+/etc/passwd
+/etc/shadow
+
+$ sudo mksquashfs /etc test.squashfs -ef excludelist
+
+# 如果希望在排除文件列表中使用通配符，需要使用-wildcard选项
+```
 
 #### 使用rsync备份系统快照
 
+数据备份需要定期完成。除了备份本地文件，可能还涉及远程数据。rsync可以在最小化数
+据传输量同时，同步不同位置上的文件和目录。相较于cp命令，rsync的优势在于比较文件修改
+日期，仅复制较新的文件。另外，它还支持远程数据传输以及压缩和加密
+
+1. 将源目录复制到目的路径
+
+```shell
+$ rsync -av source_path destination_path 
+
+$ rsync -av /home/slynux/data slynux@192.168.0.6:/home/backups/data 
+# 源路径和目的路径既可以是远程路径，也可以是本地路径，两个都是远程路径也行
+```
+
+其中：
+
+- -a表示进行归档操作
+- -v（verbose）表示在stdout上打印出细节信息或进度
+
+2. 将数据备份到远程服务器或主机
+
+```shell
+$ rsync -av source_dir username@host:PATH 
+# 要想保持两端的数据同步，需要定期运行同样的rsync命令。它只会复制更改过的文件
+```
+
+3. 下面的命令可以将远程主机上的数据恢复到本地
+
+```shell
+$ rsync -av username@host:PATH destination 
+# 确保远程主机上已安装并运行着OpenSSH服务器，可以配置免密登录
+```
+
+4. 通过网络进行传输时，压缩数据能够明显改善传输效率。我们可以用rsync的选项-z指
+   定在传输时压缩数据
+
+```shell
+$ rsync -avz source destination 
+```
+
+5. 将一个目录中的内容同步到另一个目录
+
+```shell
+$ rsync -av /home/test/ /home/backups 
+```
+
+6. 将包括目录本身在内的内容复制到另一个目录中
+
+```shell
+$ rsync -av /home/test /home/backups 
+```
+
+就路径格式而言，如果我们在源路径末尾使用/，那么rsync会 将sourch_path中结尾目录内所有内容复制到目的地
+
+如果没有在源路径末尾使用/，rsync会将sourch_path中的结尾目录本身也复制过去
+
+选项-r强制rsync以递归方式复制目录中所有的内容
 
 
 
+补充内容
+
+1. 在使用rsync进行归档时排除部分文件
+
+```shell
+# 选项--exclude和--exclude-from可以指定不需要传输的文件
+--exclude PATTERN 
+
+# 可以使用通配符指定需要排除的文件
+$ rsync -avz /home/code/app /mnt/disk/backup/code --exclude "*.o"
+
+# 或者我们也可以通过一个列表文件指定需要排除的文件
+# 这需要使用--exclude-from FILEPATH
+```
+
+2. 在更新rsync备份时，删除不存在的文件
+
+```shell
+# 默认情况下，rsync并不会在目的端删除那些在源端已不存在的文件。如果要删除这类文件，可以使用rsync的--delete选项
+$ rsync -avz SOURCE DESTINATION --delete 
+```
+
+3. 定期备份
+
+你可以创建一个cron任务来定期进行备份
+
+```shell
+# 下面是一个简单的例子：
+$ crontab -ev
+
+# 添加上这么一行：
+0 */10 * * * rsync -avz /home/code user@IP_ADDRESS:/home/backups 
+# 上面的crontab项将rsync调度为每10小时运行一次
+
+# */10处于crontab语法中的钟点位（hour position），/10表明每10小时执行一次备份
+# 如果*/10出现在分钟位（minutes position），那就是每10分钟执行一次备份
+```
 
 #### 差异化归档
 
+到目前为止，我们所描述的备份方法都是完整地复制当时的文件系统。如果在出现问题的时
+候你立刻就能发现，然后使用最近的快照来恢复，那么这种方法是有用的。但如果你没有及时发
+现问题，直到又制作了新的快照，先前正确的数据已被目前存在错误的数据覆盖，这种方法就派
+不上用场了
 
+rsync、tar和cpio可以用来制作文件系统的每日快照。但这样做成本太高。每天创建一份
+独立的快照，一周下来所需要的存储空间是所备份文件系统的7倍
 
+差异化备份只需要保存自上次完整备份之后发生变化的文件。Unix中的倾印/恢复（dump/restore）
+工具支持这种形式的归档备份。但可惜的是，这些工具是设计用于磁带设备的，所以用起来不太
+容易
 
+find命令配合tar或cpio可以实现相同的功能
+
+```shell
+# 使用tar创建第一份完整备份
+tar -cvz /backup/full.tgz /home/user 
+
+# 使用find命令的-newer选项确定自上次完整备份之后，都有哪些文件作出了改动，然后创建一份新的归档
+tar -czf day-`date +%j`.tgz `find /home/user –newer /backup/full.tgz`
+```
+
+因为从第一份完整备份往后，越来越多的文件会发生改动，所以每天的差异化归档也会越来越大。当归档大小超出预期的时候，需要再制作一份新的完整备份
 
 #### 使用fsarchiver创建全盘镜像
 
+fsarchiver可以将整个磁盘分区中的内容保存成一个压缩归档文件。和tar或cpio不同，
+fsarchiver能够保留文件的扩展属性，可用于将当前文件系统恢复到磁盘中。它能够识别并保
+留Windows和Linux系统的文件属性，因此适合于迁移Samba挂载的分区
 
+
+
+fsarchiver默认并没有安装在大多数发布版中。你得用软件包管理器自行安装
+
+更多的信息可以参考http://www.fsarchiver.org/Installation
+
+
+
+1. 创建文件系统/分区备份
+
+```shell
+# 使用fsarchiver的savefs选项
+fsarchiver savefs backup.fsa /dev/sda1 
+# backup.fsa是最终的备份文件，/dev/sda1是要备份的分区
+```
+
+2. 同时备份多个分区
+
+```shell
+fsarchiver savefs backup.fsa /dev/sda1 /dev/sda2 
+```
+
+3. 从备份归档中恢复分区
+
+```shell
+# 使用fsarchiver的restfs选项
+fsarchiver restfs backup.fsa id=0,dest=/dev/sda1
+# id=0表明我们希望从备份归档中提取第一个分区的内容，将其恢复到由dest=/dev/sda1所指定的分区
+
+# 从备份归档中恢复多个分区
+fsarchiver restfs backup.fsa id=0,dest=/dev/sda1 id=1,dest=/dev/sdb1 
+```
+
+和tar一样，fsarchiver遍历整个文件系统来生成一个文件列表，然后将所有的文件保存
+在压缩过的归档文件中。但不像tar那样只保存文件信息，fsarchiver还会备份文件系统。这
+意味着它可以很容易地将备份恢复到一个全新的分区，无须再重新创建文件系统
 
