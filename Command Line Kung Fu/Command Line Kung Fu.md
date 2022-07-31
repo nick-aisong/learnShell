@@ -1138,66 +1138,469 @@ $
 
 ### Disconnect from a Remote Session and Reconnect at a Later Time, Picking up Where You Left Off
 
+```
+$ ssh remote-host
+$ screen
+ctrl-a, d
+$ exit
+$ ssh remote-host
+$ screen -r
+```
 
+When I have a long running process that I need to complete on a remote host, I always start a screen session before launching that process.  I don't want a blip in my network connection to interrupt the work being performed on the remote host.  Sometimes I launch a process, detach from the session, and  reconnect later to examine all the output that occurred while I was away.
 
+First, ssh into the remote host.  Next, start a screen session.  Start performing your work on the remote host.  Detach from the screen session by typing ctrl-a followed by d.  The process you started will still be running in the screen session while you're away.  Also, any output generated will be available for you to view at a later time.
 
+```
+$ ssh remote-host
+$ screen
+$ /usr/local/bin/migrate-db
+Starting DB migration at Sun Apr 13 21:02:50 EDT 2014
+<ctrl-a,d>
+[detached]
+$ exit
+```
+
+To reconnect to your screen session, connect to the remote host and type screen -r.  If there is any output that scrolled past the top of the screen, you can view by typing ctrl-a followed by the escape key.  Now use the vi navigation key bindings to view the output history.  For example, you can type k to move up one line or ctrl-b to page up.  Once you are finished looking at the output history, hit escape to return to the live session.  To quit your screen session, type exit.
+
+```
+$ ssh remote-host
+$ screen -r
+Starting DB migration at 21:02
+table1 migrated at 21:34
+table2 migrated at 22:11
+table3 migrated at 22:54
+DB migration completed at 23:04
+$ exit
+[screen is terminating]
+$ exit
+```
+
+Screen is one of the most widely used and readily available screen multiplexers.  However, there are alternatives such as tmux, dtach, and byobu.
 
 ### Configure SSH to Append Domain Names to Host Names Based on a Pattern
 
+The contents of ~/.ssh/config:
 
+```
+host-prefix* !*.domain.com
+HostName %h.domain.com
+```
+
+If you connect to hosts in multiple domains via ssh it can get tiresome typing out the fully qualified domain name each time.  One way around this problem is to add each domain to the search list in /etc/resolv.conf.  The resolver will attempt the resolution for the specified host name in each of the domains in the search list until it finds one that resolves.
+
+```
+$ cat /etc/resolv.conf
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+search domain1.com domain2.com domain3.com domain4.com domain5.com domain6.com domain7.com
+```
+
+When typing "ssh remote-host" with the above resolv.conf in place, the resolver will attempt to translate remote-host.domain1.com into an IP address.  If that fails, it will attempt to resolve remote-host.domain2.com, etc.  The problem with the above reslov.conf is that the search list is limited to just six domains.  So, remote-host.domain7.com is never attempted.  Additionally, the search list is limited to 256 characters, regardless the number of domains.
+
+How can you get around the six domain search list limit?  If you're lucky enough to have a pattern of hostnames that correlate with domain names, you can configure ssh to do the resolution.  For example, for FQDNs like "ny-www1.newyork.company.com" and "ny-mysql-07.newyork.company.com" you can create a rule that appends ".newyork.company.com" to any host that begins with "ny."  You'll also want to tell ssh to ignore any hosts that begin with "ny" that already have ".newyork.company.com" appended to them.  Here's an example ~/.ssh/config file that does that.
+
+```
+$ cat ~/.ssh/config
+ny* !*.newyork.company.com
+HostName %h.newyork.company.com
+db* !*.databases.company.com
+HostName %h.databases.company.com
+jump* !*.company.com
+HostName %h.company.com
+```
+
+Now when you type "ssh ny-test" ssh will attempt to connect to "ny-test.newyork.company.com."  For hosts that begin with "db," ssh will append ".databases.company.com" to the host name.  Hosts the begin with "jump" will have the ".company.com" domain name appended to them.
+
+```
+$ ssh ny-www1
+$ hostname -f
+ny-www1.newyork.company.com
+$ exit
+$ ssh jump-ny-01
+$ hostname -f
+jump-ny-01.company.com
+$ exit
+$
+```
 
 
 
 ### Run a Command Immune to Hangups, Allowing the Job to Run after You Disconnect
 
+```
+$ nohup command &
+```
 
+Normally when you start a job in the background and log out of your session the job gets killed.  One way to ensure a command keeps running after you disconnect from the host is to use the nohup command.  No hup stands for no hang up.  By default the output of the command is stored in a file named "nohup.out" in the directory the program was launched in.  You can examine the contents of this file later to see the output of the command.  To use a different filename, employ redirection.
+
+```
+$ ssh db-server
+$ nohup /usr/local/bin/upgradedb.sh &
+[1] 13370
+$ exit
+$ ssh db-server
+$ cat nohup.out
+Starting database upgrade.
+...
+Database upgrade complete.
+$ nohup /usr/local/bin/post-upgrade.sh > /tmp/post.log &
+[1] 16711
+$ exit
+$ ssh db-server
+$ cat /tmp/post.log
+Post processing completed.
+$
+```
 
 
 
 ### Encrypt Your Web Browsing Data with an SSH SOCKS Proxy
 
+```
+$ ssh -D PORT remote-host
+```
 
+If you are using an open wireless hotpot and want to ensure your web browsing data is encrypted, you can redirect your web browsing traffic through another host via SSH.  Start ssh with the "-D" option and provide a port to open up on your local computer for proxy connections. If you only want to perform the port forwarding and not actually log into the shell of the remote host, use the "-N" option for ssh.  Configure your web browser to use a SOCKS 5 proxy using localhost for the host and the port you supplied to ssh.
+
+```
+$ ssh -ND 1080 ubuntu@ec2-75-101-157-145.compute-1.amazonaws.com
+$ firefox http://www.mybank.com
+```
 
 
 
 ### Download a Webpage, HTTP Data, or Use a Web API from the Command Line
 
+```
+$ curl -o file.html http://website/webpage
+$ wget http://website/webpage
+```
 
+The curl and wget commands can be used to download a webpage or anything that is available on a web server.  You can use these commands to interact with HTTP APIs, download software packages, download a status page, or even get the current weather.
 
+Here's an example of checking the status page of your local apache web server.
 
+```
+$ curl -o server-status.html http://localhost/server-status
+  % Total        % Received % Xferd  Average Speed   Time        Time         Time Current Dload  Upload   Total   Spent        Left  Speed
+100  6148  100  6148        0         0  1070k          0 --:--:-- --:--:-- --:--:-- 1200k
 
-### Use Vim to Edit Files over the Network
+$ wget http://localhost/server-status
+--2014-04-19 14:37:18--  http://localhost/server-status
+Resolving localhost (localhost)... 127.0.0.1
+Connecting to localhost (localhost)|127.0.0.1|:80... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 6377 (6.2K) [text/html]
+Saving to: `server-status'
+100%[=====>] 6,377           --.-K/s   in 0s          
+2014-04-19 14:37:18 (105 MB/s) - `server-status' saved [6377/6377]
 
+$ grep uptime server-status*
+server-status:<dt>Server uptime:  50 minutes 13 seconds</dt>
+server-status.html:<dt>Server uptime:  50 minutes 5 seconds</dt>
+```
 
+Here's an example of getting the current weather.
+
+```
+$ curl -so lax-weather.html http://weather.noaa.gov/pub/data/observations/metar/decoded/KLAX.TXT
+$ cat lax-weather.html
+LOS ANGELES INTERNTL AIRPORT, CA, United States (KLAX) 33-56N 118-23W 46M
+Apr 19, 2014 - 02:53 PM EDT / 2014.04.19 1853 UTC
+Wind: from the W (260 degrees) at 10 MPH (9 KT):0
+Visibility: 10 mile(s):0
+Sky conditions: mostly cloudy
+Temperature: 64.9 F (18.3 C)
+Dew Point: 54.0 F (12.2 C)
+Relative Humidity: 67%
+Pressure (altimeter): 30.03 in. Hg (1016 hPa)
+ob: KLAX 191853Z 26009KT 10SM FEW022 BKN220 18/12 A3003 RMK AO2 SLP167 T01830122
+cycle: 19
+
+$ wget -q http://weather.noaa.gov/pub/data/observations/metar/decoded/KLAX.TXT
+$ cat KLAX.TXT
+LOS ANGELES INTERNTL AIRPORT, CA, United States (KLAX) 33-56N 118-23W 46M
+Apr 19, 2014 - 02:53 PM EDT / 2014.04.19 1853 UTC
+Wind: from the W (260 degrees) at 10 MPH (9 KT):0
+Visibility: 10 mile(s):0
+Sky conditions: mostly cloudy
+Temperature: 64.9 F (18.3 C)
+Dew Point: 54.0 F (12.2 C)
+Relative Humidity: 67%
+Pressure (altimeter): 30.03 in. Hg (1016 hPa)
+ob: KLAX 191853Z 26009KT 10SM FEW022 BKN220 18/12 A3003 RMK AO2 SLP167 T01830122
+cycle: 19
+$
+```
+
+Download and install a package.
+
+```
+$ wget -q https://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-1.1.1.deb
+
+$ sudo dpkg -i elasticsearch-1.1.1.deb
+Selecting previously unselected package elasticsearch.
+(Reading database ... 162097 files and directories currently installed.)
+Unpacking elasticsearch (from elasticsearch-1.1.1.deb) ...
+Setting up elasticsearch (1.1.1) ...
+Adding system user `elasticsearch' (UID 116) ...
+Adding new user `elasticsearch' (UID 116) with group `elasticsearch' ...
+Not creating home directory `/usr/share/elasticsearch'.
+### NOT starting elasticsearch by default on bootup, please execute sudo update-rc.d elasticsearch defaults 95 10
+### In order to start elasticsearch, execute sudo /etc/init.d/elasticsearch start
+Processing triggers for ureadahead ...
+
+$ sudo /etc/init.d/elasticsearch start
+ * Starting Elasticsearch Server [ OK ]
+$
+```
+
+Interact with a web API.
+
+```
+$ curl http://localhost:9200
+{
+  "status" : 200,
+  "name" : "NFL Superpro",
+  "version" : {
+        "number" : "1.1.1",
+        "build_hash" : "f1585f096d3f3985e73456debdc1a0745f512bbc",
+        "build_timestamp" : "2014-04-16T14:27:12Z",
+        "build_snapshot" : false,
+        "lucene_version" : "4.7"
+  },
+  "tagline" : "You Know, for Search"
+  }
+  
+$ curl http://localhost:9200/_cluster/health?pretty
+{
+  "cluster_name" : "elasticsearch",
+  "status" : "green",
+  "timed_out" : false,
+  "number_of_nodes" : 1,
+  "number_of_data_nodes" : 1,
+  "active_primary_shards" : 0,
+  "active_shards" : 0,
+  "relocating_shards" : 0,
+  "initializing_shards" : 0,
+  "unassigned_shards" : 0
+}
+$
+```
 
 
 
 ## Shell Scripting
 ### Use a for Loop at the Command Line
 
+```
+$ for VAR in LIST
+> do
+> # use $VAR
+> done
+```
 
+When you need to perform the same action for a list of items, you can use a for loop right from your shell.
+
+```
+$ for USER in bob jill fred
+> do
+> sudo passwd -l $USER
+> logger -t naughty-user $USER
+> done
+Locking password for user bob.
+passwd: Success
+Locking password for user jill.
+passwd: Success
+Locking password for user fred.
+passwd: Success
+
+$ sudo tail -3 /var/log/messages
+Apr 8 19:29:03 linuxserver naughty-user: bob
+Apr 8 19:29:03 linuxserver naughty-user: jill
+Apr 8 19:29:03 linuxserver naughty-user: fred
+```
+
+You can also type entire loop on one command line
+
+```
+$ for USER in bob jill fred; do sudo passwd -l $USER; logger -t naughty-user $USER; done
+...
+```
 
 
 
 ### Command Substitution
 
+```
+$ VAR=`command`
+$ VAR=$(command)
+```
 
+There are two forms of command substitution. The first form uses backticks (`) to surround a command while the second form uses a dollar sign followed by parenthesis that surround a command. They are functionally equivalent with the backtick form being the older style. The output of the command can be used as an argument to another command, to set a variable, or for generating the argument list for a for loop.
+
+```
+$ EXT_FILESYSTEMS=$(grep ext fstab | awk '{print $2}')
+$ echo $EXT_FILESYSTEMS
+/ /boot
+$ cp file.txt file.txt.`date +%F`
+$ ls file.txt*
+file.txt file.txt.2014-04-08
+$ ps -fp $(cat /var/run/ntpd.pid)
+UID PID PPID C STIME TTY TIME CMD
+ntp 1210 1 0 Apr06 ? 00:00:05 ntpd -u ntp:ntp -p /var/run/ntpd
+$ sudo kill -9 $(cat /var/run/ntpd.pid)
+$ for x in $(cut -d: -f1 /etc/passwd); do groups $x; done
+jason : jason sales
+bobdjr : sales
+jim : jim
+```
 
 
 
 ### Store Command Line Output as a Variable to Use Later
 
+```
+$ for VAR in LIST
+> do
+> VAR2=$(command)
+> VAR3=$(command)
+> echo "$VAR2 VAR3"
+> done
+```
 
+Command substitution can be used to assign values to variables. If you need to reuse the output of a command multiple times, assign it to a variable once and reuse the variable. This example shows how the output of the id command is used multiple times in one script.
+
+```
+$ for USER in $(cut -f1 -d: /etc/passwd)
+> do
+> UID_MIN=$(grep ^UID_MIN /etc/login.defs | awk '{print $NF}')
+> USERID=$(id -u $USER)
+> [ $USERID -lt $UID_MIN ] || {
+> echo "Forcing password expiration for $USER with UID of $USERID."
+> sudo passwd -e $USER
+> }
+> done
+Forcing password expiration for bob with UID of 1000.
+Forcing password expiration for bobdjr with UID of 1001.
+Forcing password expiration for bobh with UID of 1002.
+```
 
 
 
 ### Read in Input One Line at a Time
 
+```
+$ while read LINE
+> do
+> # Do something with $LINE
+> done < file.txt
 
+$ command | while read LINE
+> do
+> # Do something with $LINE
+> done
+```
+
+If you want to iterate over a list of words, use a for loop. If you want to iterate over a line, use a while loop in combination with a read statement and redirection. 
+
+Let's look for file systems that are over 90% utilized. If we try to use an if statement it will break up the output into word chunks like this.
+
+```
+$ df | head -1
+Filesystem 1K-blocks Used Available Use% Mounted on
+
+$ for x in $(df)
+> do
+> echo $x
+> done
+Filesystem
+1K-blocks
+Used
+Available
+Use%
+Mounted
+on
+...
+```
+
+We need to read in entire lines at a time like this.
+
+```
+$ df | while read LINE
+> do
+> echo $LINE
+> done
+Filesystem 1K-blocks Used Available Use% Mounted on
+...
+```
+
+Here is one way to find file systems that are over 90% utilized.
+
+```
+$ df
+Filesystem 1K-blocks Used Available Use% Mounted on
+/dev/sda2 28891260 3270340 25327536 12% /
+tmpfs 515320 72 515248 1% /dev/shm
+/dev/sda1 495844 453683 16561 97% /boot
+
+$ df | grep [0-9]% | while read LINE
+> do
+> use=$(echo $LINE | awk '{print $5}' | tr -d '%')
+> mountpoint=$(echo $LINE | awk '{print $6}')
+> [ $use -gt 90 ] && echo "$mountpoint is over 90% utilized."
+> done
+/boot is over 90% utilized.
+$
+```
+
+Instead of assigning variables within the while loop, you can assign them with the read statement. Here is how this method looks.
+
+```
+$ df | grep [0-9]% | while read fs blocks used available use mountpoint
+> do
+> use=$(echo $use | tr -d '%')
+> [ $use -gt 90 ] && echo "$mountpoint is over 90% utilized."
+> done
+/boot is over 90% utilized.
+```
 
 
 
 ### Accept User Input and Store It in a Variable
+
+```
+$ read VAR
+$ read -n 1 VAR
+$ read -p "Prompt text" VAR
+```
+
+To accept user input from a user, use the read command. Read will accept an entire line of input and store it into a variable. You can force read to only read a limited number of characters by using the -n option. Instead of using echo statements before a read command, you can supply a prompt by using the -p option. Here is a sample script that uses these techniques. 
+
+The contents of backup.sh:
+
+```
+#!/bin/bash
+while true
+do
+  read -p "What server would you like to backup? " SERVER
+  echo "Backing up $SERVER"
+  /usr/local/bin/backup $SERVER
+  read -p "Backup another server? (y/n) " -n 1 BACKUP_AGAIN
+  echo
+  [ "$BACKUP_AGAIN" = "y" ] || break
+done
+
+$ ./backup.sh
+What server would you like to backup? thor
+Backing up thor
+Backup another server? (y/n) y
+What server would you like to backup? loki
+Backing up loki
+Backup another server? (y/n) n
+$
+```
 
 
 
@@ -1205,13 +1608,54 @@ $
 
 ### Sum All the Numbers in a given Column of a Text
 
+```
+$ awk '{ sum += $1 } END { print sum }' file
+$ cat file | awk '{ sum += $1 } END { print sum }
+```
 
+Awk can be used to tally up a column of values. You can use this trick to add up all the disk space used across all the file systems on a given system, for example.
+
+```
+$ df -mt ext4
+Filesystem 1M-blocks Used Available Use% Mounted on
+/dev/mapper/vg_root-lv_root 28215 3285 24644 12% /
+/dev/sda1 485 55 406 12% /boot
+
+$ df -mt ext4 | awk '{ sum += $3 } END {print sum}'
+3340
+
+$ sudo dmidecode --type memory
+    Size: No Module Installed
+    Size: 4096 MB
+    Size: No Module Installed
+    Size: 4096 MB
+
+$ sudo dmidecode --type memory | grep 'Size:' | awk '{sum+=$2} END
+{print sum}'
+8192
+$
+```
 
 
 
 ### Automatically Answer Yes to Any Command
 
+```
+$ yes | command
+$ yes "string" | command
+```
 
+If you are trying to automate a process that requires user input, check out the yes command. By default yes simply prints out "y" until it is killed. You can make yes repeat any string. If you wanted to automatically answer "no" you could run "yes no."
+
+```
+$ ./install-my-app.sh
+Are you sure you want to install my-app? (y/n) y
+Ok, my-app installed.
+
+$ yes | ./install-my-app.sh
+Ok, my-app installed.
+$
+```
 
 
 
